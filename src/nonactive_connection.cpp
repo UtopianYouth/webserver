@@ -18,7 +18,7 @@
 #define MAX_EVENT_NUMBER 1024
 #define TIMESLOT 5
 
-static int pipefd[2];               // 管道
+static int pipefd[2];               // 管道，0是读端，1是写端
 static SortTimerLst timer_lst;      // 定时器链表
 static int epollfd = 0;
 
@@ -66,7 +66,7 @@ void timer_handler() {
     alarm(TIMESLOT);
 }
 
-// 定时器回调函数，它删除非活动连接 socket 上的注册事件，并关闭之
+// 定时器回调函数，删除非活动连接 socket 上的注册事件，并关闭
 void cb_func(ClientData* user_data) {
     epoll_ctl(epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
     assert(user_data);
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
     bzero(&server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(9999);
+    server_addr.sin_port = htons(port);
 
     ret = bind(listen_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
     assert(ret != -1);
@@ -160,6 +160,8 @@ int main(int argc, char* argv[]) {
                     for (int i = 0;i < ret;++i) {
                         switch (signals[i]) {
                         case SIGALRM:
+                            // 用 timeout 标记有定时任务需要处理，但不立即处理定时任务
+                            // 这是因为定时任务的优先级不是很高，程序优先处理其它更重要的任务
                             timeout = true;
                             break;
                         case SIGTERM:
@@ -190,7 +192,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else {
-                    // 如果某个客户端上有数据可读，则我们要调整该连接对应的定时器，以延迟该连接被关闭的时间
+                    // 如果某个客户端上有数据可读，则我们要调整该连接对应的定时器，以延迟该连接被关闭的时间（客户端还在活跃）
                     if (timer) {
                         time_t cur = time(NULL);
                         timer->expire = cur + 3 * TIMESLOT;

@@ -18,9 +18,10 @@
 #include <sys/mman.h>
 #include <stdarg.h>
 #include <errno.h>
-#include "locker.h"
 #include <sys/uio.h>
+#include "locker.h"
 
+// 任务类，每一个对象处理客户端的一个 HTTP 请求
 class HttpConnection {
 public:
     static int m_epoll_fd;      // 所有客户端通信对应 socket 上的事件都被注册到同一个 epoll 对象中，所以设置成静态的
@@ -30,7 +31,7 @@ public:
     static const int WRITE_BUFFER_SIZE = 1024;  // 写缓冲区大小
     static const int FILENAME_LEN = 200;        // 文件名的最大长度
 
-    // HTTP 请求方法，但我们只支持 GET
+    // HTTP 请求方法，目前只支持 GET
     enum METHOD {
         GET = 0,
         POST,
@@ -77,49 +78,16 @@ public:
     };
 
     /*
-    从状态机的三种可能状态，即行的读取状态，分别表示：
-    - 1. 读取到一个完整的行
-    - 2. 行出错
-    - 3. 行数据尚且不完整（没有读到完整的行，还需要继续读取）
+        从状态机的三种可能状态，即行的读取状态，分别表示：
+        - LINE_OK: 读取到一个完整的行
+        - LINE_BAD: 行出错
+        - LINE_OPEN: 行数据尚且不完整（没有读到完整的行，还需要继续读取）
     */
     enum LINE_STATUS {
         LINE_OK = 0,
         LINE_BAD,
         LINE_OPEN
     };
-public:
-    HttpConnection();
-    ~HttpConnection();
-public:
-    void init(int sockfd, const sockaddr_in& client_addr);      // 初始化新接收的客户端连接
-    void close_connection();    // 关闭客户端的连接
-    bool read();                // 非阻塞读
-    bool write();               // 非阻塞写
-    void process();             // 响应并且处理客户端的请求
-
-private:
-    void init();                                    // 初始化其余的数据
-    HTTP_CODE process_read();                       // 解析 HTTP 请求
-    bool process_write(HTTP_CODE ret);              // 响应（填充） HTTP 应答
-
-    // 下面这一组函数被 process_read 调用以分析 HTTP 请求
-    HTTP_CODE parse_request_line(char* text);       // 解析请求首行
-    HTTP_CODE parse_request_headers(char* text);    // 解析请求头
-    HTTP_CODE parse_request_content(char* text);    // 解析请求体    
-    HTTP_CODE do_request();
-    char* get_line() { return this->m_read_buf + this->m_start_line; }  // 获取一行数据
-    LINE_STATUS parse_line_data();                       // 获取 HTTP 请求的一行数据   
-
-    // 下面这一组函数被 process_write 调用以填充 HTTP 应答
-    void unmap();                                           // 释放内存映射 
-    bool add_response(const char* format, ...);
-    bool add_content(const char* content);
-    bool add_content_type();
-    bool add_status_line(int status, const char* title);
-    void add_headers(int content_length);
-    bool add_content_length(int content_length);
-    bool add_keep_alive();
-    bool add_blank_line();
 
 private:
     int m_sockfd;               // 客户端 HTTP 连接对应的文件描述符
@@ -148,6 +116,39 @@ private:
 
     int bytes_to_send;          // 将要发送的数据的字节数
     int bytes_have_send;        // 已经发送的字节数
+
+public:
+    HttpConnection();
+    ~HttpConnection();
+    void init(int sockfd, const sockaddr_in& client_addr);      // 初始化新接收的客户端连接
+    void close_connection();    // 关闭客户端的连接
+    bool read();                // 非阻塞读
+    bool write();               // 非阻塞写
+    void process();             // 响应并且处理客户端的请求
+
+private:
+    void init();                                    // 初始化其余的数据
+    HTTP_CODE process_read();                       // 解析 HTTP 请求
+    bool process_write(HTTP_CODE ret);              // 响应（填充） HTTP 应答
+
+    // 下面这一组函数被 process_read 调用以分析 HTTP 请求
+    HTTP_CODE parse_request_line(char* text);       // 解析请求首行
+    HTTP_CODE parse_request_headers(char* text);    // 解析请求头
+    HTTP_CODE parse_request_content(char* text);    // 解析请求体    
+    HTTP_CODE do_request();
+    char* get_line() { return this->m_read_buf + this->m_start_line; }  // 获取一行数据
+    LINE_STATUS parse_line_data();                       // 获取 HTTP 请求的一行数据   
+
+    // 下面这一组函数被 process_write 调用以填充 HTTP 响应
+    void unmap();                                           // 释放内存映射 
+    bool add_response(const char* format, ...);             // 添加响应内容（通用函数）
+    bool add_content(const char* content);                  // 添加响应体
+    bool add_content_type();                                // 添加响应类型
+    bool add_status_line(int status_num, const char* status_content);   // 添加响应状态行
+    void add_headers(int content_length);                   // 添加响应头
+    bool add_content_length(int content_length);            // 添加响应体长度
+    bool add_keep_alive();                                  // 添加是否保持连接
+    bool add_blank_line();                                  // 添加响应空白行
 };
 
 #endif

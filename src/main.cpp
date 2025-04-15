@@ -7,7 +7,6 @@
 #include<fcntl.h>
 #include<sys/epoll.h>
 #include<signal.h>
-#include"../include/locker.h"
 #include"../include/thread_pool.h"
 #include"../include/http_connection.h"
 
@@ -34,7 +33,7 @@ extern void modify_fd_epoll(int epoll_fd, int fd, int event_num);
 
 int main(int argc, char* argv[]) {
     if (argc <= 1) {
-        printf("按照如下格式运行：%s port_number\n", basename(argv[0]));
+        printf("The correct format is: %s port_number\n", basename(argv[0]));
         exit(-1);
     }
 
@@ -42,6 +41,7 @@ int main(int argc, char* argv[]) {
     int port = atoi(argv[1]);
 
     // 对 SIGPIPE 信号进行处理
+    // SIGPIPE: Broken pipe 向一个没有读端的管道写数据
     addsig(SIGPIPE, SIG_IGN);
 
     // 创建线程池，初始化线程池
@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 监听
-    int ret2 = listen(listen_fd, 64);
+    int ret2 = listen(listen_fd, 1024);
     if (ret2 == -1) {
         perror("listen");
         exit(-1);
@@ -89,6 +89,8 @@ int main(int argc, char* argv[]) {
 
     // 创建 epoll 对象，事件数组，添加
     epoll_event events[MAX_EVENT_NUMBER];
+
+    // 创建 epoll 对象，参数可以是任何大于 0 的值
     int epoll_fd = epoll_create(5);
 
     // 初始化 HttpConnection 的 static 参数
@@ -122,8 +124,8 @@ int main(int argc, char* argv[]) {
                     exit(-1);
                 }
 
-                if (HttpConnection::m_user_count > MAX_FD) {
-                    // 目前客户端的连接数已满，给客户端发送提示
+                if (HttpConnection::m_user_count >= MAX_FD) {
+                    // 客户端的连接数已满
                     close(communication_fd);
                     continue;
                 }
@@ -138,7 +140,7 @@ int main(int argc, char* argv[]) {
             else if (events[i].events & EPOLLIN) {
                 // 通信文件描述符读缓冲区有数据
                 if (users[sockfd].read()) {
-                    // 一次性把所有数据读完，users + sockfd 找到发生 EPOLLIN 事件的文件描述符所在内存地址
+                    // 一次性把所有数据读完，users + sockfd 找到发生 EPOLLIN 事件（发送 HTTP 请求）的客户端
                     pool->append(users + sockfd);
                 }
                 else {
@@ -147,6 +149,7 @@ int main(int argc, char* argv[]) {
             }
             else if (events[i].events & EPOLLOUT) {
                 if (!users[sockfd].write()) {
+                    // 如果客户端的 keep-alive = false，只写一次 HTTP 响应
                     users[sockfd].close_connection();
                 }
             }
@@ -158,7 +161,10 @@ int main(int argc, char* argv[]) {
     close(epoll_fd);
     close(listen_fd);
 
+    // 工作任务对象数组
     delete[] users;
+
+    // 线程池对象
     delete pool;
 
     return 0;
