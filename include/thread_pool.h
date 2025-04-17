@@ -20,7 +20,7 @@ private:
     bool m_stop;                // 是否结束线程
 public:
     // thread_number 是线程池中线程的数量， max_requests 是请求队列中最多允许的、等待处理的请求的数量 
-    ThreadPool(int thread_number = 8, int max_requests = 10000);
+    ThreadPool(int thread_number = 4, int max_requests = 10000);
 
     // 释放线程池资源
     ~ThreadPool();
@@ -92,6 +92,7 @@ bool ThreadPool<T>::append(T* request) {
     return true;
 }
 
+// 线程被创建，worker 函数会自动执行
 template<typename T>
 void* ThreadPool<T>::worker(void* arg) {
     // static 修饰的成员函数不能访问成员变量，线程逻辑只能通过 arg 传递过来的 this 指针访问成员函数

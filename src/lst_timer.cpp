@@ -16,7 +16,7 @@ SortTimerLst::~SortTimerLst() {
 }
 
 // 将目标定时器 Timer 添加到链表中
-void SortTimerLst::add_tiemr(UtilTimer* timer) {
+void SortTimerLst::add_timer(UtilTimer* timer) {
     if (timer == NULL) {
         return;
     }
@@ -126,7 +126,7 @@ void SortTimerLst::tick() {
         // 没有需要处理的定时器任务
         return;
     }
-    printf("timer tick.\n");
+    //printf("timer tick.\n");
     time_t cur = time(NULL);    // 获取当前系统时间
     UtilTimer* tmp = this->head;
 

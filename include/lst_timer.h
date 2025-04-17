@@ -11,10 +11,9 @@ class UtilTimer;        // 前向声明
 
 // 用户数据结构
 typedef struct ClientData {
-    struct sockaddr_in address;    // 客户端 socket 地址
-    int sockfd;             // socket 文件描述符
-    char buf[BUFFER_SIZE];  // 读缓存
-    UtilTimer* timer;       // 每一个客户端连接对应一个定时器
+    struct sockaddr_in address;     // 客户端 socket 地址
+    int sockfd;                     // socket 文件描述符
+    UtilTimer* timer;               // 每一个客户端连接对应一个定时器
 }ClientData;
 
 
@@ -34,7 +33,6 @@ public:
     UtilTimer() : prev(NULL), next(NULL) {}
 public:
     void(*cb_func)(ClientData*);    // 函数指针，任务回调函数，回调函数处理的客户数据，由定时器的执行者传递给回调函数
-
 };
 
 // 定时器链表，它是一个带有头尾节点的升序、双向链表
@@ -50,7 +48,7 @@ public:
     ~SortTimerLst();
 
     // 将目标定时器 Timer 添加到链表中
-    void add_tiemr(UtilTimer* timer);
+    void add_timer(UtilTimer* timer);
 
     /*
         当某个定时任务发生变化时，调整对应的定时器在链表中的位置。这个函数只考虑被调整的

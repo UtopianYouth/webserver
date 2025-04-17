@@ -32,7 +32,7 @@ void add_fd_epoll(int epoll_fd, int fd, bool one_shot) {
     epoll_event event;
     event.data.fd = fd;
 
-    event.events = EPOLLIN | EPOLLRDHUP;    // EPOLLRDHUP 事件属性可以检测文件描述符对应的客户端断开连接，交给内核处理
+    event.events = EPOLLIN | EPOLLRDHUP | EPOLLET;    // EPOLLRDHUP 事件属性可以检测文件描述符对应的客户端断开连接，交给内核处理
 
     if (one_shot) {
         // EPOLLNONESHOT 事件属性限制一个线程操作一个 socket
@@ -46,10 +46,10 @@ void add_fd_epoll(int epoll_fd, int fd, bool one_shot) {
     set_non_blocking(fd);
 }
 
-// 从 epoll 对象中删除监听的文件描述符
+// 从 epoll 对象中删除文件描述符
 void remove_fd_epoll(int epoll_fd, int fd) {
-    // 删除
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
+    //printf("close fd = %d.\n", fd);
     close(fd);
 }
 
@@ -141,7 +141,7 @@ bool HttpConnection::read() {
         this->m_read_index += bytes_read;
     }
     // 输出每一次读取到的数据
-    printf("read data:\n%s", this->m_read_buf);
+    //printf("read data:\n%s", this->m_read_buf);
     return true;
 }
 
@@ -293,7 +293,7 @@ HttpConnection::HTTP_CODE HttpConnection::process_read() {
     // 从状态机初始化为读取到完整的一行
     LINE_STATUS line_status = LINE_OK;
 
-    // 主状态机初始化状态为请求不完整
+    // HTTP请求初始化为不完整
     HTTP_CODE ret = NO_REQUEST;
 
     char* text = 0;
@@ -328,11 +328,11 @@ HttpConnection::HTTP_CODE HttpConnection::process_read() {
                 return this->do_request();
             }
             else {
-                line_status = LINE_OPEN;    // 请求体数据没有被完全读入
+                line_status = LINE_OPEN;        // 请求体数据没有被完全读入
             }
             break;
         default:
-            return INTERNAL_ERROR;      // 主状态机其它状态，内部错误
+            return INTERNAL_ERROR;              // 主状态机其它状态，内部错误
         }
     }
     return NO_REQUEST;
@@ -408,8 +408,9 @@ bool HttpConnection::write() {
         tmp = writev(this->m_sockfd, this->m_iv, this->m_iv_count);
         if (tmp <= -1) {
             /*
-                如果 TCP 写缓冲区没有空间，则等待下一轮 EPOLLOUT 事件，虽然在此期间，
-                服务器无法立即接收到同一客户端的下一个请求，但可以保证连接的完整性
+                如果 TCP 写缓冲区没有空间，则等待下一轮 EPOLLOUT 事件，重新调用 modify_fd_epoll() 是有必要的，
+                以便主线程在 epoll_wait() 时，可以检测到 web 程序触发了 EPOLLOUT 事件，需要向 TCP 写缓冲区中写数据,
+                在此期间，服务器无法立即接收到同一客户端的下一个请求（没有注册 EPOLLIN 事件），但可以保证连接的完整性。
             */
             if (errno == EAGAIN) {
                 modify_fd_epoll(this->m_epoll_fd, this->m_sockfd, EPOLLOUT);
@@ -423,12 +424,13 @@ bool HttpConnection::write() {
         this->bytes_to_send -= tmp;
 
         if (this->bytes_have_send >= this->m_iv[0].iov_len) {
-            // 响应状态行和响应头发送完毕
+            // 响应状态行和响应头发送完毕，发送响应体
             this->m_iv[0].iov_len = 0;
             this->m_iv[1].iov_base = this->m_file_address + (this->bytes_have_send - this->m_write_index);
             this->m_iv[1].iov_len = this->bytes_to_send;
         }
         else {
+            // 继续发送响应状态行和响应头
             this->m_iv[0].iov_base = this->m_write_buf + this->bytes_have_send;
             this->m_iv[0].iov_len = this->m_iv[0].iov_len - tmp;
         }

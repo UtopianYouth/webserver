@@ -18,7 +18,9 @@
 
 static int pipefd[2];               // 定时器发送的信号通过管道传输，0 是读端，1是写端
 static SortTimerLst timer_lst;      // 定时器双向链表，一个客户端的 TCP 连接对应一个定时器
-static int epoll_fd = 0;
+static int epoll_fd = 0;            // epoll 事件
+HttpConnection* users = new HttpConnection[MAX_FD];     // 客户端的 TCP 连接任务类对象
+ClientData* lst_users = new ClientData[MAX_FD];         // 定时器客户端信息类对象
 
 // 添加信号捕捉
 void addsig(int sig, void(handler)(int)) {
@@ -46,11 +48,8 @@ void timer_handler() {
 }
 
 // 定时器回调函数，删除超时连接的 socket 上的注册事件
-void cb_func(ClientData* user_data) {
-    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, user_data->sockfd, 0);
-    assert(user_data);
-    close(user_data->sockfd);
-    printf("close fd %d.\n", user_data->sockfd);
+extern void cb_func(ClientData* user_data) {
+    users[user_data->sockfd].close_connection();
 }
 
 // 设置文件描述符非阻塞
@@ -82,6 +81,12 @@ int main(int argc, char* argv[]) {
     addsig(SIGTERM, sig_handler);
     bool stop_server = false;
 
+    // 创建 epoll 对象，事件数组，添加
+    epoll_event events[MAX_EVENT_NUMBER];
+
+    // 创建 epoll 对象，参数可以是任何大于 0 的值
+    epoll_fd = epoll_create(5);
+
     // 创建线程池，初始化线程池
     ThreadPool<HttpConnection>* pool = NULL;
     try {
@@ -91,15 +96,6 @@ int main(int argc, char* argv[]) {
         // 创建线程池失败，参数 ... 表示捕获所有类型的异常
         exit(-1);
     }
-
-    // 创建一个数组用于保存所有的客户端信息
-    HttpConnection* users = new HttpConnection[MAX_FD];
-
-    // 创建 epoll 对象，事件数组，添加
-    epoll_event events[MAX_EVENT_NUMBER];
-
-    // 创建 epoll 对象，参数可以是任何大于 0 的值
-    epoll_fd = epoll_create(5);
 
     // 创建管道
     int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
@@ -143,7 +139,6 @@ int main(int argc, char* argv[]) {
     // 初始化 HttpConnection 的 static 参数
     HttpConnection::m_epoll_fd = epoll_fd;
 
-    ClientData* lst_users = new ClientData[MAX_FD];
     bool timeout = false;
     alarm(TIMESLOT);
 
@@ -166,9 +161,10 @@ int main(int argc, char* argv[]) {
                 struct sockaddr_in client_addr;
                 socklen_t addr_len = sizeof(client_addr);
                 int communication_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &addr_len);
-                if (communication_fd == -1) {
+                if (communication_fd < 0) {
                     perror("accept");
-                    exit(-1);
+                    printf("errno is %d.\n", errno);
+                    continue;
                 }
 
                 if (HttpConnection::m_user_count >= MAX_FD) {
@@ -191,9 +187,9 @@ int main(int argc, char* argv[]) {
                 time_t cur = time(NULL);    // 获取当前系统时间
                 timer->expire = cur + 3 * TIMESLOT;
                 lst_users[communication_fd].timer = timer;
-                timer_lst.add_tiemr(timer);
+                timer_lst.add_timer(timer);
 
-                printf("communication_fd = %d, addr = %s.\n", communication_fd, inet_ntoa(client_addr.sin_addr));
+                //printf("communication_fd = %d, addr = %s.\n", communication_fd, inet_ntoa(client_addr.sin_addr));
             }
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                 // 客户端发生异常断开或者错误等事件
@@ -232,13 +228,12 @@ int main(int argc, char* argv[]) {
                     if (timer) {
                         time_t cur = time(NULL);
                         timer->expire = cur + 3 * TIMESLOT;
-                        printf("adjust timer once.\n");
+                        //printf("adjust timer once.\n");
                         timer_lst.adjust_timer(timer);
                     }
                 }
                 else {
                     // 移除定时器
-                    cb_func(&lst_users[sockfd]);
                     if (timer) {
                         timer_lst.del_timer(timer);
                     }
@@ -249,9 +244,6 @@ int main(int argc, char* argv[]) {
                 if (!users[sockfd].write()) {
                     // 如果客户端的 keep-alive = false，只写一次 HTTP 响应
                     users[sockfd].close_connection();
-                }
-                else {
-                    printf("sockfd = %d.\n", sockfd);
                 }
             }
 
