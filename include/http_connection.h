@@ -27,8 +27,8 @@ public:
     static int m_epoll_fd;      // 所有客户端通信对应 socket 上的事件都被注册到同一个 epoll 对象中，所以设置成静态的
     static int m_user_count;    // 统计客户端的数量
 
-    static const int READ_BUFFER_SIZE = 2048;   // 读缓冲区大小
-    static const int WRITE_BUFFER_SIZE = 1024;  // 写缓冲区大小
+    static const int READ_BUFFER_SIZE = 4096;   // 读缓冲区大小
+    static const int WRITE_BUFFER_SIZE = 2048;  // 写缓冲区大小
     static const int FILENAME_LEN = 200;        // 文件名的最大长度
 
     // HTTP 请求方法，目前只支持 GET
@@ -42,6 +42,7 @@ public:
         OPTIONS,
         CONNECT
     };
+
 
     /*
         解析客户端请求时，主状态机的状态

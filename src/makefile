@@ -13,8 +13,8 @@ CFLAGS = -g
 
 all: main nonactive_connection
 
-main: main.cpp http_connection.cpp
-	g++ $(CFLAGS) main.cpp -o webserver $(PUBINCL) $(PUBCPP1) -lpthread
+main: main.cpp http_connection.cpp lst_timer.cpp
+	g++ $(CFLAGS) main.cpp -o webserver $(PUBINCL) $(PUBCPP1) $(PUBCPP2) -lpthread
 	cp -f webserver ../bin/webserver
 
 nonactive_connection: nonactive_connection.cpp lst_timer.cpp

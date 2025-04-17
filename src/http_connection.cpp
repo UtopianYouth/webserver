@@ -141,7 +141,7 @@ bool HttpConnection::read() {
         this->m_read_index += bytes_read;
     }
     // 输出每一次读取到的数据
-    printf("read data: %s\n", this->m_read_buf);
+    printf("read data:\n%s", this->m_read_buf);
     return true;
 }
 
@@ -164,20 +164,16 @@ HttpConnection::LINE_STATUS HttpConnection::parse_line_data() {
                 this->m_read_buf[this->m_checked_index++] = '\0';
                 return LINE_OK;
             }
-            else {
-                return LINE_BAD;
-            }
+            return LINE_BAD;
         }
         else if (temp == '\n') {
-            if (this->m_checked_index > 1 && this->m_read_buf[this->m_checked_index - 1] == '\r') {
+            if ((this->m_checked_index > 1) && (this->m_read_buf[this->m_checked_index - 1] == '\r')) {
                 // 一行完整数据，将 '\r' 和 '\n' 换成 '\0'
                 this->m_read_buf[this->m_checked_index - 1] = '\0';
                 this->m_read_buf[this->m_checked_index++] = '\0';
                 return LINE_OK;
             }
-            else {
-                return LINE_BAD;
-            }
+            return LINE_BAD;
         }
     }
 
@@ -223,7 +219,7 @@ HttpConnection::HTTP_CODE HttpConnection::parse_request_line(char* text) {
         this->m_url = strchr(this->m_url, '/');     // /index.html (查找指定字符第一次出现的位置)
     }
 
-    if (this->m_url == NULL || this->m_url[0] != '/') {
+    if ((this->m_url == NULL) || (this->m_url[0] != '/')) {
         return BAD_REQUEST;
     }
 
@@ -251,7 +247,15 @@ HttpConnection::HTTP_CODE HttpConnection::parse_request_headers(char* text) {
         // 处理 Connection 头部字段，Connection: keep-alive
         text += 11;
         text += strspn(text, " \t");    // 计算前缀长度
-        if (strcasecmp(text, "keep_alive") == 0) {
+        if (strcasecmp(text, "keep-alive") == 0) {
+            this->m_keep_alive = true;
+        }
+    }
+    else if (strncasecmp(text, "Proxy-Connection:", 17) == 0) {
+        // 处理 Proxy-Connection 头部字段，考虑代理服务器的行为（但是）
+        text += 17;
+        text += strspn(text, " \t");
+        if (strcasecmp(text, "keep-alive") == 0) {
             this->m_keep_alive = true;
         }
     }
@@ -269,7 +273,7 @@ HttpConnection::HTTP_CODE HttpConnection::parse_request_headers(char* text) {
     }
     else {
         // 请求体中的其它类型
-        // printf("oop! unknow header %s\n", text);
+        //printf("unknow header %s\n", text);
     }
     return NO_REQUEST;  // 继续解析 HTTP 请求内容
 }
@@ -293,14 +297,14 @@ HttpConnection::HTTP_CODE HttpConnection::process_read() {
     HTTP_CODE ret = NO_REQUEST;
 
     char* text = 0;
-    while ((this->m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) ||
+    while (((this->m_check_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK)) ||
         ((line_status = parse_line_data()) == LINE_OK)) {
         // 解析到了一行完整的数据，或者解析到了请求体，也是完整的数据
 
         // 获取一行数据
         text = this->get_line();
         this->m_start_line = this->m_checked_index;
-        printf("got 1 http line: %s\n", text);
+        //printf("got 1 http line: %s\n", text);
 
         switch (this->m_check_state) {
         case CHECK_STATE_REQUESTLINE:
@@ -315,7 +319,7 @@ HttpConnection::HTTP_CODE HttpConnection::process_read() {
                 return BAD_REQUEST;
             }
             else if (ret == GET_REQUEST) {
-                return this->do_request();      // 表示获取一个完整的客户端请求，文件获取成功
+                return this->do_request();      // 表示获取一个完整的客户端请求，向客户端响应请求的内容
             }
             break;
         case CHECK_STATE_CONTENT:
@@ -557,7 +561,8 @@ bool HttpConnection::process_write(HTTP_CODE ret) {
     this->m_iv[0].iov_base = this->m_write_buf;
     this->m_iv[0].iov_len = this->m_write_index;
     this->m_iv_count = 1;
-    this->bytes_to_send = this->m_write_index;    return true;
+    this->bytes_to_send = this->m_write_index;
+    return true;
 }
 
 // 由线程池中的工作线程调用，这是处理 HTTP 请求的入口函数

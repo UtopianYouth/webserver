@@ -11,7 +11,7 @@ class UtilTimer;        // 前向声明
 
 // 用户数据结构
 typedef struct ClientData {
-    sockaddr_in address;    // 客户端 socket 地址
+    struct sockaddr_in address;    // 客户端 socket 地址
     int sockfd;             // socket 文件描述符
     char buf[BUFFER_SIZE];  // 读缓存
     UtilTimer* timer;       // 每一个客户端连接对应一个定时器
