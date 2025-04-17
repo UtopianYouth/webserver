@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
                 lst_users[communication_fd].timer = timer;
                 timer_lst.add_timer(timer);
 
-                //printf("communication_fd = %d, addr = %s.\n", communication_fd, inet_ntoa(client_addr.sin_addr));
+                printf("communication_fd = %d, addr = %s.\n", communication_fd, inet_ntoa(client_addr.sin_addr));
             }
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                 // 客户端发生异常断开或者错误等事件

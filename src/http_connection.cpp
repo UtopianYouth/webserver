@@ -49,7 +49,7 @@ void add_fd_epoll(int epoll_fd, int fd, bool one_shot) {
 // 从 epoll 对象中删除文件描述符
 void remove_fd_epoll(int epoll_fd, int fd) {
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
-    //printf("close fd = %d.\n", fd);
+    printf("close fd = %d.\n", fd);
     close(fd);
 }
 

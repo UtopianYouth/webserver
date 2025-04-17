@@ -114,8 +114,7 @@ void SortTimerLst::del_timer(UtilTimer* timer) {
     timer->prev->next = timer->next;
     timer->next->prev = timer->prev;
     delete timer;
-
-    timer = nullptr;
+    timer = NULL;
 }
 
 /*
