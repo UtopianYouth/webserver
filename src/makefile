@@ -11,14 +11,11 @@ PUBCPP2 = /home/utopianyouth/webserver/src/lst_timer.cpp
 CFLAGS = -g
 # CLFAGS = -O2
 
-all: main nonactive_connection
+all: main
 
 main: main.cpp http_connection.cpp lst_timer.cpp
 	g++ $(CFLAGS) main.cpp -o webserver $(PUBINCL) $(PUBCPP1) $(PUBCPP2) -lpthread
 	cp -f webserver ../bin/webserver
-
-# nonactive_connection: nonactive_connection.cpp lst_timer.cpp
-# 	g++ $(CFLAGS) nonactive_connection.cpp -o nonactive_connection $(PUBCPP2) -lpthread
 	
 clean:
 	/bin/rm -rf webserver

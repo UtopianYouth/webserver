@@ -157,39 +157,42 @@ int main(int argc, char* argv[]) {
             int sockfd = events[i].data.fd;
 
             if (sockfd == listen_fd) {
-                // 有新的客户端连接
-                struct sockaddr_in client_addr;
-                socklen_t addr_len = sizeof(client_addr);
-                int communication_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &addr_len);
-                if (communication_fd < 0) {
-                    perror("accept");
-                    printf("errno is %d.\n", errno);
-                    continue;
+                while (true) {
+                    // 有新的客户端连接
+                    struct sockaddr_in client_addr;
+                    socklen_t addr_len = sizeof(client_addr);
+                    int communication_fd = accept(listen_fd, (struct sockaddr*)&client_addr, &addr_len);
+                    if (communication_fd < 0) {
+                        if (!(errno == EAGAIN || errno == EWOULDBLOCK)) {
+                            perror("accept");
+                            printf("errno is %d.\n", errno);
+                        }
+                    }
+
+                    if (HttpConnection::m_user_count >= MAX_FD) {
+                        // 客户端的连接数已满
+                        close(communication_fd);
+                        continue;
+                    }
+
+                    // 将新的客户端连接数据初始化，在数组中保存客户端的连接信息
+                    users[communication_fd].init(communication_fd, client_addr);
+
+                    // 定时器需要的 ClientData 初始化
+                    lst_users[communication_fd].address = client_addr;
+                    lst_users[communication_fd].sockfd = communication_fd;
+
+                    // 创建定时器，设置其回调函数与超时时间，然后绑定定时器与用户数据，最后将定时器添加到链表 timer_lst 中
+                    UtilTimer* timer = new UtilTimer;
+                    timer->user_data = &lst_users[communication_fd];
+                    timer->cb_func = cb_func;
+                    time_t cur = time(NULL);    // 获取当前系统时间
+                    timer->expire = cur + 3 * TIMESLOT;
+                    lst_users[communication_fd].timer = timer;
+                    timer_lst.add_timer(timer);
+
+                    //printf("communication_fd = %d, addr = %s.\n", communication_fd, inet_ntoa(client_addr.sin_addr));
                 }
-
-                if (HttpConnection::m_user_count >= MAX_FD) {
-                    // 客户端的连接数已满
-                    close(communication_fd);
-                    continue;
-                }
-
-                // 将新的客户端连接数据初始化，在数组中保存客户端的连接信息
-                users[communication_fd].init(communication_fd, client_addr);
-
-                // 定时器需要的 ClientData 初始化
-                lst_users[communication_fd].address = client_addr;
-                lst_users[communication_fd].sockfd = communication_fd;
-
-                // 创建定时器，设置其回调函数与超时时间，然后绑定定时器与用户数据，最后将定时器添加到链表 timer_lst 中
-                UtilTimer* timer = new UtilTimer;
-                timer->user_data = &lst_users[communication_fd];
-                timer->cb_func = cb_func;
-                time_t cur = time(NULL);    // 获取当前系统时间
-                timer->expire = cur + 3 * TIMESLOT;
-                lst_users[communication_fd].timer = timer;
-                timer_lst.add_timer(timer);
-
-                printf("communication_fd = %d, addr = %s.\n", communication_fd, inet_ntoa(client_addr.sin_addr));
             }
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                 // 客户端发生异常断开或者错误等事件
