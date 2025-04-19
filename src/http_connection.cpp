@@ -27,12 +27,16 @@ int set_non_blocking(int fd) {
 }
 
 // 添加需要监听的文件描述符到 epoll 对象中
-void add_fd_epoll(int epoll_fd, int fd, bool one_shot) {
+void add_fd_epoll(int epoll_fd, int fd, bool et, bool one_shot) {
     // 注册 epoll 对象监听的 IO 事件
     epoll_event event;
     event.data.fd = fd;
 
-    event.events = EPOLLIN | EPOLLRDHUP | EPOLLET;    // EPOLLRDHUP 事件属性可以检测文件描述符对应的客户端断开连接，交给内核处理
+    event.events = EPOLLIN | EPOLLRDHUP;    // EPOLLRDHUP 事件属性可以检测文件描述符对应的客户端断开连接，交给内核处理
+
+    if (et) {
+        event.events |= EPOLLET;
+    }
 
     if (one_shot) {
         // EPOLLNONESHOT 事件属性限制一个线程操作一个 socket
@@ -82,7 +86,7 @@ void HttpConnection::init(int sockfd, const sockaddr_in& client_addr) {
     setsockopt(this->m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 
     // 添加到 epoll 对象中，指定 EPOLLONESHOT，一个线程处理一个 socket 通信
-    add_fd_epoll(this->m_epoll_fd, this->m_sockfd, true);
+    add_fd_epoll(this->m_epoll_fd, this->m_sockfd, true, true);
     ++this->m_user_count;       // 连接的客户端数量 + 1
 
     // 初始化其余信息
@@ -445,7 +449,8 @@ bool HttpConnection::write() {
                 return true;
             }
             else {
-                // 只响应一次
+                // 只响应一次，关闭 TCP 通信不用初始化 HTTP 任务类对象也行
+                // 下一个客户端连接到服务器上时，调用了 HTTP 任务类的初始化函数
                 return false;
             }
         }
@@ -580,7 +585,7 @@ void HttpConnection::process() {
     // 生成响应
     bool write_ret = process_write(read_ret);
     if (!write_ret) {
-        close_connection();
+        this->close_connection();
     }
 
     // 监测文件描述符写事件 

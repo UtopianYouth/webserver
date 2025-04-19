@@ -136,7 +136,7 @@ void SortTimerLst::tick() {
             系统当前时间比较，判断定时器是否到期
         */
         if (tmp->expire > cur) {
-            // 没有检测到活跃的连接
+            // 没有检测到不活跃的连接
             break;
         }
 

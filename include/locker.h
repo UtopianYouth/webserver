@@ -85,7 +85,7 @@ class semaphore {
 private:
     sem_t m_sem;    // 信号量
 public:
-    // 初始化信号量1
+    // 初始化信号量1，实现默认构造函数
     semaphore() {
         if (sem_init(&this->m_sem, 0, 0) != 0) {
             throw std::exception();
