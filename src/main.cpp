@@ -11,19 +11,19 @@
 #include"../include/http_connection.h"
 #include "../include/lst_timer.h"
 
-#define MAX_FD 65536                //支持最大的文件描述符个数（最大的连接客户端数）
-#define MAX_EVENT_NUMBER 10000      // epoll 监听的最大的 IO 事件数量
+#define MAX_FD 65536                // 支持最大的文件描述符个数（最大的连接客户端数）
+#define MAX_EVENT_NUMBER 65536      // epoll 监听的最大的 IO 事件数量
 #define TIMESLOT 5                  // 定时器发送信号的间隔时间（秒）
 
 
 static int pipefd[2];               // 定时器发送的信号通过管道传输，0 是读端，1是写端
-static SortTimerLst timer_lst;      // 定时器双向链表，一个客户端的 TCP 连接对应一个定时器
+static SortTimerLst timer_lst;      // 定时器双向链表，一个 TCP 连接对应一个定时器
 static int epoll_fd = 0;            // epoll 事件
 HttpConnection* users = new HttpConnection[MAX_FD];     // 客户端的 TCP 连接任务类对象
 ClientData* lst_users = new ClientData[MAX_FD];         // 定时器客户端信息类对象
 
 // 添加信号捕捉
-void addsig(int sig, void(handler)(int)) {
+void addSignal(int sig, void(handler)(int)) {
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
     sa.sa_handler = handler;
@@ -32,15 +32,15 @@ void addsig(int sig, void(handler)(int)) {
 }
 
 // 添加信号处理函数，管道写端
-void sig_handler(int sig) {
+void sigHandler(int sig) {
     int save_errno = errno;
     int msg = sig;
     send(pipefd[1], (char*)&msg, 1, 0);
     errno = save_errno;
 }
 
-// SIGALARM 信号处理函数
-void timer_handler() {
+// 超时函数处理
+void timerHandler() {
     // 定时处理任务，实际上就是调用tick()函数
     timer_lst.tick();
     // 因为一次 alarm 调用只会引起一次 SIGALRM 信号，所以我们要重新定时，发送 SIGALRM 信号
@@ -48,21 +48,21 @@ void timer_handler() {
 }
 
 // 定时器回调函数，删除超时连接的 socket 上的注册事件
-extern void cb_func(ClientData* user_data) {
-    users[user_data->sockfd].close_connection();
+extern void cbFunc(ClientData* user_data) {
+    users[user_data->sockfd].closeConnection();
 }
 
 // 设置文件描述符非阻塞
-extern int set_non_blocking(int fd);
+extern int setNonBlocking(int fd);
 
 // 添加文件描述符到 epoll 对象中
-extern void add_fd_epoll(int epoll_fd, int fd, bool et, bool one_shot);
+extern void addFDEpoll(int epoll_fd, int fd, bool et, bool one_shot);
 
 // 从 epoll 对象中删除文件描述符
-extern void remove_fd_epoll(int epoll_fd, int fd);
+extern void removeFDEpoll(int epoll_fd, int fd);
 
 // 修改 epoll 对象中的文件描述符
-extern void modify_fd_epoll(int epoll_fd, int fd, int event_num);
+extern void modifyFDEpoll(int epoll_fd, int fd, int event_num);
 
 
 int main(int argc, char* argv[]) {
@@ -76,9 +76,9 @@ int main(int argc, char* argv[]) {
 
     // 对 SIGPIPE 信号进行处理
     // SIGPIPE: Broken pipe 向一个没有读端的管道写数据
-    addsig(SIGPIPE, SIG_IGN);
-    addsig(SIGALRM, sig_handler);
-    addsig(SIGTERM, sig_handler);
+    addSignal(SIGPIPE, SIG_IGN);
+    addSignal(SIGALRM, sigHandler);
+    addSignal(SIGTERM, sigHandler);
     bool stop_server = false;
 
     // 创建 epoll 对象，事件数组，添加
@@ -100,8 +100,8 @@ int main(int argc, char* argv[]) {
     // 创建一对相互连接的匿名套接字，适用于本地 IPC，支持全双工通信
     int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
     assert(ret != -1);
-    set_non_blocking(pipefd[1]);
-    add_fd_epoll(epoll_fd, pipefd[0], false, false);
+    setNonBlocking(pipefd[1]);
+    addFDEpoll(epoll_fd, pipefd[0], false, false);
 
     // 创建监听用的文件描述符
     int listen_fd = socket(PF_INET, SOCK_STREAM, 0);
@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 将监听的文件描述符添加到 epoll 对象中，监听的文件描述符不需要 EPOLLONESHOT
-    add_fd_epoll(epoll_fd, listen_fd, false, false);
+    addFDEpoll(epoll_fd, listen_fd, false, false);
 
     // 初始化 HttpConnection 的 static 参数
     HttpConnection::m_epoll_fd = epoll_fd;
@@ -181,18 +181,18 @@ int main(int argc, char* argv[]) {
                 // 创建定时器，设置其回调函数与超时时间，然后绑定定时器与用户数据，最后将定时器添加到链表 timer_lst 中
                 UtilTimer* timer = new UtilTimer;
                 timer->user_data = &lst_users[communication_fd];
-                timer->cb_func = cb_func;
+                timer->cb_func = cbFunc;
                 time_t cur = time(NULL);    // 获取当前系统时间
                 timer->expire = cur + 3 * TIMESLOT;
                 lst_users[communication_fd].timer = timer;
-                timer_lst.add_timer(timer);
+                timer_lst.addTimer(timer);
 
                 printf("communication_fd = %d, addr = %s.\n", communication_fd, inet_ntoa(client_addr.sin_addr));
 
             }
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
                 // 客户端发生异常断开或者错误等事件
-                users[sockfd].close_connection();
+                users[sockfd].closeConnection();
             }
             else if ((sockfd == pipefd[0]) && (events[i].events & EPOLLIN)) {
                 // 处理信号
@@ -220,7 +220,7 @@ int main(int argc, char* argv[]) {
                 // 通信文件描述符读缓冲区有数据
                 UtilTimer* timer = lst_users[sockfd].timer;
                 if (users[sockfd].read()) {
-                    // 一次性把所有数据读完，users + sockfd 找到发生 EPOLLIN 事件（发送 HTTP 请求）的客户端
+                    // 一次性把所有数据读完，users + sockfd 找到对应的
                     pool->append(users + sockfd);
 
                     // 成功读取数据，调整该连接对应的定时器，以延迟该连接被关闭的时间（客户端还在活跃）
@@ -228,21 +228,21 @@ int main(int argc, char* argv[]) {
                         time_t cur = time(NULL);
                         timer->expire = cur + 3 * TIMESLOT;
                         //printf("adjust timer once.\n");
-                        timer_lst.adjust_timer(timer);
+                        timer_lst.adjustTimer(timer);
                     }
                 }
                 else {
                     // 移除定时器
                     if (timer) {
-                        timer_lst.del_timer(timer);
+                        timer_lst.delTimer(timer);
                     }
-                    users[sockfd].close_connection();
+                    users[sockfd].closeConnection();
                 }
             }
             else if (events[i].events & EPOLLOUT) {
                 if (!users[sockfd].write()) {
                     // 如果客户端的 keep-alive = false，只写一次 HTTP 响应
-                    users[sockfd].close_connection();
+                    users[sockfd].closeConnection();
                 }
             }
 
@@ -250,7 +250,7 @@ int main(int argc, char* argv[]) {
 
         // 最后处理定时事件，因为 I/O 事件有更高的优先级，当然，这样做会存在定时误差
         if (timeout) {
-            timer_handler();
+            timerHandler();
             timeout = false;
         }
 

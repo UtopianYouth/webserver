@@ -48,16 +48,16 @@ public:
     ~SortTimerLst();
 
     // 将目标定时器 Timer 添加到链表中
-    void add_timer(UtilTimer* timer);
+    void addTimer(UtilTimer* timer);
 
     /*
         当某个定时任务发生变化时，调整对应的定时器在链表中的位置。这个函数只考虑被调整的
         定时器的超时时间延长的情况，即该定时器需要往链表的尾部移动
     */
-    void adjust_timer(UtilTimer* timer);
+    void adjustTimer(UtilTimer* timer);
 
     // 将目标定时器 timer 从链表中删除
-    void del_timer(UtilTimer* timer);
+    void delTimer(UtilTimer* timer);
 
     /*
         SIGALRM 信号每次被触发就在其信号处理函数中执行一次 tick() 函数，以处理链表上到期的任务
@@ -69,7 +69,7 @@ private:
         一个重载的辅助函数，它被公有的 add_timer 函数和 adjust_timer 函数调用
         该函数表示将目标定时器 timer 添加到结点 head 之后的部分链表中
     */
-    void add_timer(UtilTimer* timer, UtilTimer* head);
+    void addTimer(UtilTimer* timer, UtilTimer* head);
 };
 
 #endif 

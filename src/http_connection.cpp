@@ -19,7 +19,7 @@ int HttpConnection::m_epoll_fd = -1;        // 主线程会创建 epoll 对象�
 int HttpConnection::m_user_count = 0;
 
 // 设置文件描述符非阻塞
-int set_non_blocking(int fd) {
+int setNonBlocking(int fd) {
     int old_option = fcntl(fd, F_GETFL);
     int new_option = old_option | O_NONBLOCK;
     fcntl(fd, F_SETFL, new_option);
@@ -27,7 +27,7 @@ int set_non_blocking(int fd) {
 }
 
 // 添加需要监听的文件描述符到 epoll 对象中
-void add_fd_epoll(int epoll_fd, int fd, bool et, bool one_shot) {
+void addFDEpoll(int epoll_fd, int fd, bool et, bool one_shot) {
     // 注册 epoll 对象监听的 IO 事件
     epoll_event event;
     event.data.fd = fd;
@@ -47,18 +47,18 @@ void add_fd_epoll(int epoll_fd, int fd, bool et, bool one_shot) {
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event);
 
     // 设置文件描述符非阻塞
-    set_non_blocking(fd);
+    setNonBlocking(fd);
 }
 
 // 从 epoll 对象中删除文件描述符
-void remove_fd_epoll(int epoll_fd, int fd) {
+void removeFDEpoll(int epoll_fd, int fd) {
     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL);
     //printf("close fd = %d.\n", fd);
     close(fd);
 }
 
 // 修改 epoll 对象中的文件描述符，重置 socket 上的 EPOLLONESHOT 事件，以确保下一次可读时，EPOLLIN 事件能被触发
-void modify_fd_epoll(int epoll_fd, int fd, int event_num) {
+void modifyFDEpoll(int epoll_fd, int fd, int event_num) {
     epoll_event event;
     event.data.fd = fd;
     event.events = event_num | EPOLLONESHOT | EPOLLRDHUP | EPOLLET;
@@ -68,9 +68,9 @@ void modify_fd_epoll(int epoll_fd, int fd, int event_num) {
 }
 
 // 关闭客户端连接
-void HttpConnection::close_connection() {
+void HttpConnection::closeConnection() {
     if (this->m_sockfd != -1) {
-        remove_fd_epoll(this->m_epoll_fd, this->m_sockfd);
+        removeFDEpoll(this->m_epoll_fd, this->m_sockfd);
         this->m_sockfd = -1;
         --this->m_user_count;       // 连接的客户端总数量减一
     }
@@ -86,7 +86,7 @@ void HttpConnection::init(int sockfd, const sockaddr_in& client_addr) {
     setsockopt(this->m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 
     // 添加到 epoll 对象中，指定 EPOLLONESHOT，一个线程处理一个 socket 通信
-    add_fd_epoll(this->m_epoll_fd, this->m_sockfd, true, true);
+    addFDEpoll(this->m_epoll_fd, this->m_sockfd, true, true);
     ++this->m_user_count;       // 连接的客户端数量 + 1
 
     // 初始化其余信息
@@ -150,7 +150,7 @@ bool HttpConnection::read() {
 }
 
 // 获取 HTTP 请求的一行数据（解析一行，判断依据 \r\n）
-HttpConnection::LINE_STATUS HttpConnection::parse_line_data() {
+HttpConnection::LINE_STATUS HttpConnection::parseLineData() {
     char temp;
     // 遍历读取到的字节流数据
     for (; this->m_checked_index < this->m_read_index; ++this->m_checked_index) {
@@ -186,7 +186,7 @@ HttpConnection::LINE_STATUS HttpConnection::parse_line_data() {
 }
 
 // 解析 HTTP 请求行，获得请求方法，目标 URL，HTTP 版本
-HttpConnection::HTTP_CODE HttpConnection::parse_request_line(char* text) {
+HttpConnection::HTTP_CODE HttpConnection::parseRequestLine(char* text) {
     // GET /index.html HTTP/1.1
     this->m_url = strpbrk(text, " \t");         // 判断第二个参数中的字符哪个在 text 中最先出现
     if (this->m_url == NULL) {
@@ -233,7 +233,7 @@ HttpConnection::HTTP_CODE HttpConnection::parse_request_line(char* text) {
 }
 
 // 解析 HTTP 请求头信息
-HttpConnection::HTTP_CODE HttpConnection::parse_request_headers(char* text) {
+HttpConnection::HTTP_CODE HttpConnection::parseRequestHeaders(char* text) {
     // 遇到空行，表示头部字段解析完毕
     if (text[0] == '\0') {
         if (this->m_content_length != 0) {
@@ -283,7 +283,7 @@ HttpConnection::HTTP_CODE HttpConnection::parse_request_headers(char* text) {
 }
 
 // 这里并没有真正解析 HTTP 请求体信息，只是判断它是否被完整的读入了
-HttpConnection::HTTP_CODE HttpConnection::parse_request_content(char* text) {
+HttpConnection::HTTP_CODE HttpConnection::parseRequestContent(char* text) {
     if (this->m_read_index >= (this->m_content_length + this->m_checked_index)) {
         text[this->m_content_length] = '\0';
         return GET_REQUEST;
@@ -292,7 +292,7 @@ HttpConnection::HTTP_CODE HttpConnection::parse_request_content(char* text) {
 }
 
 // 主状态机，解析 HTTP 请求
-HttpConnection::HTTP_CODE HttpConnection::process_read() {
+HttpConnection::HTTP_CODE HttpConnection::processRead() {
 
     // 从状态机初始化为读取到完整的一行
     LINE_STATUS line_status = LINE_OK;
@@ -302,34 +302,34 @@ HttpConnection::HTTP_CODE HttpConnection::process_read() {
 
     char* text = 0;
     while (((this->m_check_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK)) ||
-        ((line_status = parse_line_data()) == LINE_OK)) {
+        ((line_status = parseLineData()) == LINE_OK)) {
         // 解析到了一行完整的数据，或者解析到了请求体，也是完整的数据
 
         // 获取一行数据
-        text = this->get_line();
+        text = this->getLine();
         this->m_start_line = this->m_checked_index;
         //printf("got 1 http line: %s\n", text);
 
         switch (this->m_check_state) {
         case CHECK_STATE_REQUESTLINE:
-            ret = this->parse_request_line(text);
+            ret = this->parseRequestLine(text);
             if (ret == BAD_REQUEST) {
                 return BAD_REQUEST;
             }
             break;
         case CHECK_STATE_HEADER:
-            ret = this->parse_request_headers(text);
+            ret = this->parseRequestHeaders(text);
             if (ret == BAD_REQUEST) {
                 return BAD_REQUEST;
             }
             else if (ret == GET_REQUEST) {
-                return this->do_request();      // 表示获取一个完整的客户端请求，向客户端响应请求的内容
+                return this->GetRequestFile();      // 表示获取一个完整的客户端请求，向客户端响应请求的内容
             }
             break;
         case CHECK_STATE_CONTENT:
-            ret = parse_request_content(text);
+            ret = parseRequestContent(text);
             if (ret == GET_REQUEST) {
-                return this->do_request();
+                return this->GetRequestFile();
             }
             else {
                 line_status = LINE_OPEN;        // 请求体数据没有被完全读入
@@ -347,7 +347,7 @@ HttpConnection::HTTP_CODE HttpConnection::process_read() {
     如果目标文件存在、对所有用户可读，且不是目录，则使用 mmap 将
     其映射到内存地址 m_file_address 处，并告诉调用者获取文件成功
 */
-HttpConnection::HTTP_CODE HttpConnection::do_request() {
+HttpConnection::HTTP_CODE HttpConnection::GetRequestFile() {
     // "/home/utopiayouth/linux_study/webserver/resources"
     strcpy(this->m_real_file, doc_root);
     int len = strlen(doc_root);
@@ -400,7 +400,7 @@ bool HttpConnection::write() {
     int tmp = 0;
     if (this->bytes_to_send == 0) {
         // 将要发送的字节为 0，这一次响应结束
-        modify_fd_epoll(this->m_epoll_fd, this->m_sockfd, EPOLLIN);
+        modifyFDEpoll(this->m_epoll_fd, this->m_sockfd, EPOLLIN);
         this->init();
         return true;
     }
@@ -412,12 +412,12 @@ bool HttpConnection::write() {
         tmp = writev(this->m_sockfd, this->m_iv, this->m_iv_count);
         if (tmp <= -1) {
             /*
-                如果 TCP 写缓冲区没有空间，则等待下一轮 EPOLLOUT 事件，重新调用 modify_fd_epoll() 是有必要的，
+                如果 TCP 写缓冲区没有空间，则等待下一轮 EPOLLOUT 事件，重新调用 modifyFDEpoll() 是有必要的，
                 以便主线程在 epoll_wait() 时，可以检测到 web 程序触发了 EPOLLOUT 事件，需要向 TCP 写缓冲区中写数据,
                 在此期间，服务器无法立即接收到同一客户端的下一个请求（没有注册 EPOLLIN 事件），但可以保证连接的完整性。
             */
             if (errno == EAGAIN) {
-                modify_fd_epoll(this->m_epoll_fd, this->m_sockfd, EPOLLOUT);
+                modifyFDEpoll(this->m_epoll_fd, this->m_sockfd, EPOLLOUT);
                 return true;
             }
             this->unmap();
@@ -442,7 +442,7 @@ bool HttpConnection::write() {
         if (this->bytes_to_send <= 0) {
             // 没有数据要发送了
             this->unmap();
-            modify_fd_epoll(this->m_epoll_fd, this->m_sockfd, EPOLLIN);
+            modifyFDEpoll(this->m_epoll_fd, this->m_sockfd, EPOLLIN);
 
             if (this->m_keep_alive) {
                 this->init();
@@ -458,7 +458,7 @@ bool HttpConnection::write() {
 }
 
 // 往写缓冲区中写入待发送的数据，format 参数表示格式化参数列表，和 printf 的第一个参数类似
-bool HttpConnection::add_response(const char* format, ...) {
+bool HttpConnection::addResponse(const char* format, ...) {
     if (this->m_write_index >= WRITE_BUFFER_SIZE) {
         return false;       // 写缓冲区满
     }
@@ -478,79 +478,79 @@ bool HttpConnection::add_response(const char* format, ...) {
 }
 
 // 响应状态行
-bool HttpConnection::add_status_line(int status_num, const char* status_content) {
-    return this->add_response("%s %d %s\r\n", "HTTP/1.1", status_num, status_content);
+bool HttpConnection::addStatusLine(int status_num, const char* status_content) {
+    return this->addResponse("%s %d %s\r\n", "HTTP/1.1", status_num, status_content);
 }
 
 // 响应头
-void HttpConnection::add_headers(int content_len) {
-    this->add_content_length(content_len);      // 如果请求资源成功，content_length 表示资源的大小（响应体大小）
-    this->add_content_type();
-    this->add_keep_alive();
-    this->add_blank_line();
+void HttpConnection::addHeaders(int content_len) {
+    this->addContentLength(content_len);      // 如果请求资源成功，content_length 表示资源的大小（响应体大小）
+    this->addContentType();
+    this->addKeepAlive();
+    this->addBlankLine();
 }
 
 // 响应头：响应体长度
-bool HttpConnection::add_content_length(int content_len) {
-    return this->add_response("Content-Length: %d\r\n", content_len);
+bool HttpConnection::addContentLength(int content_len) {
+    return this->addResponse("Content-Length: %d\r\n", content_len);
 }
 
 // 响应头：是否保持连接
-bool HttpConnection::add_keep_alive() {
-    return this->add_response("Connection: %s\r\n", (this->m_keep_alive == true) ? "keep-alive" : "close");
+bool HttpConnection::addKeepAlive() {
+    return this->addResponse("Connection: %s\r\n", (this->m_keep_alive == true) ? "keep-alive" : "close");
 }
 
 // 响应头：空白行
-bool HttpConnection::add_blank_line() {
-    return this->add_response("%s", "\r\n");
+bool HttpConnection::addBlankLine() {
+    return this->addResponse("%s", "\r\n");
 }
 
 // 响应体
-bool HttpConnection::add_content(const char* content) {
-    return this->add_response("%s", content);
+bool HttpConnection::addContent(const char* content) {
+    return this->addResponse("%s", content);
 }
 
 // 响应体类型
-bool HttpConnection::add_content_type() {
-    return this->add_response("Content-Type: %s\r\n", "text/html");
+bool HttpConnection::addContentType() {
+    return this->addResponse("Content-Type: %s\r\n", "text/html");
 }
 
 // 根据服务器处理 HTTP 请求的结果，决定返回给客户端的内容
-bool HttpConnection::process_write(HTTP_CODE ret) {
+bool HttpConnection::processWrite(HTTP_CODE ret) {
     switch (ret) {
     case INTERNAL_ERROR:
-        this->add_status_line(500, error_500_title);
-        this->add_headers(strlen(error_500_form));
-        if (this->add_content(error_500_form) == false) {
+        this->addStatusLine(500, error_500_title);
+        this->addHeaders(strlen(error_500_form));
+        if (this->addContent(error_500_form) == false) {
             return false;
         }
         break;
     case BAD_REQUEST:
-        this->add_status_line(400, error_400_title);
-        this->add_headers(strlen(error_400_form));
-        if (this->add_content(error_400_form) == false) {
+        this->addStatusLine(400, error_400_title);
+        this->addHeaders(strlen(error_400_form));
+        if (this->addContent(error_400_form) == false) {
             return false;
         }
         break;
     case NO_RESOURCE:
-        this->add_status_line(404, error_404_title);
-        this->add_headers(strlen(error_404_form));
-        if (this->add_content(error_404_form) == false) {
+        this->addStatusLine(404, error_404_title);
+        this->addHeaders(strlen(error_404_form));
+        if (this->addContent(error_404_form) == false) {
             return false;
         }
         break;
     case FORBIDDEN_REQUEST:
-        this->add_status_line(403, error_403_title);
-        this->add_headers(strlen(error_403_form));
-        if (this->add_content(error_403_form) == false) {
+        this->addStatusLine(403, error_403_title);
+        this->addHeaders(strlen(error_403_form));
+        if (this->addContent(error_403_form) == false) {
             return false;
         }
         break;
     case FILE_REQUEST:
         // 请求服务器资源文件成功
         // 也需要返回对应的响应状态行，响应头（基于HTTP协议），这样返回的服务器资源才能正确地被运行 HTTP 协议的浏览器解析
-        this->add_status_line(200, ok_200_title);
-        this->add_headers(this->m_file_stat.st_size);
+        this->addStatusLine(200, ok_200_title);
+        this->addHeaders(this->m_file_stat.st_size);
         // 分散写对象初始化，涉及到两块内存区
         this->m_iv[0].iov_base = this->m_write_buf;
         this->m_iv[0].iov_len = this->m_write_index;
@@ -575,23 +575,22 @@ bool HttpConnection::process_write(HTTP_CODE ret) {
 // 由线程池中的工作线程调用，这是处理 HTTP 请求的入口函数
 void HttpConnection::process() {
     // 解析 HTTP 请求
-    HTTP_CODE read_ret = process_read();
+    HTTP_CODE read_ret = processRead();
     if (read_ret == NO_REQUEST) {
         // NO_REQUEST: 需要继续读取客户端请求的内容
-        modify_fd_epoll(this->m_epoll_fd, this->m_sockfd, EPOLLIN);
+        modifyFDEpoll(this->m_epoll_fd, this->m_sockfd, EPOLLIN);
         return;
     }
 
     // 生成响应
-    bool write_ret = process_write(read_ret);
+    bool write_ret = processWrite(read_ret);
     if (!write_ret) {
-        this->close_connection();
+        this->closeConnection();
     }
 
     // 监测文件描述符写事件 
-    modify_fd_epoll(this->m_epoll_fd, this->m_sockfd, EPOLLOUT);
+    modifyFDEpoll(this->m_epoll_fd, this->m_sockfd, EPOLLOUT);
 }
-
 
 HttpConnection::HttpConnection() {
 

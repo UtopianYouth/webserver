@@ -16,7 +16,7 @@ SortTimerLst::~SortTimerLst() {
 }
 
 // 将目标定时器 Timer 添加到链表中
-void SortTimerLst::add_timer(UtilTimer* timer) {
+void SortTimerLst::addTimer(UtilTimer* timer) {
     if (timer == NULL) {
         return;
     }
@@ -38,14 +38,14 @@ void SortTimerLst::add_timer(UtilTimer* timer) {
     }
 
     // 将 timer 节点插入到链表合适的位置
-    this->add_timer(timer, this->head);
+    this->addTimer(timer, this->head);
 }
 
 /*
     当某个定时任务发生变化时，调整对应的定时器在链表中的位置。这个函数只考虑被调整的
     定时器的超时时间延长的情况，即该定时器需要往链表的尾部移动
 */
-void SortTimerLst::adjust_timer(UtilTimer* timer) {
+void SortTimerLst::adjustTimer(UtilTimer* timer) {
     if (timer == NULL) {
         return;
     }
@@ -64,19 +64,19 @@ void SortTimerLst::adjust_timer(UtilTimer* timer) {
         this->head = this->head->next;
         this->head->prev = NULL;
         timer->next = NULL;
-        this->add_timer(timer, this->head);
+        this->addTimer(timer, this->head);
     }
     else {
         // 如果目标定时器不是链表的头结点，则将该定时器从链表中取出，然后插入其原来所在位置后的部分链表中（只考虑超时时间延长）
         timer->prev->next = timer->next;
         timer->next->prev = timer->prev;
         timer->next = timer->prev = NULL;   // 取下的结点指针指向置 NULL，防止野指针的出现
-        this->add_timer(timer, tmp);
+        this->addTimer(timer, tmp);
     }
 }
 
 // 将目标定时器 timer 从链表中删除
-void SortTimerLst::del_timer(UtilTimer* timer) {
+void SortTimerLst::delTimer(UtilTimer* timer) {
     if (timer == NULL) {
         return;
     }
@@ -157,7 +157,7 @@ void SortTimerLst::tick() {
     一个重载的辅助函数，它被公有的 add_timer 函数和 adjust_timer 函数调用
     该函数表示将目标定时器 timer 添加到结点 head 之后的部分链表中
 */
-void SortTimerLst::add_timer(UtilTimer* timer, UtilTimer* head) {
+void SortTimerLst::addTimer(UtilTimer* timer, UtilTimer* head) {
     UtilTimer* prev = head;     // 在一个结点的前面插入结点，需要记录该结点的前一个结点
     UtilTimer* tmp = prev->next;
 
