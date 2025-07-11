@@ -11,9 +11,10 @@
 #include"../include/http_connection.h"
 #include "../include/lst_timer.h"
 
-#define MAX_FD 65536                // 支持最大的文件描述符个数（最大的连接客户端数）
-#define MAX_EVENT_NUMBER 65536      // epoll 监听的最大的 IO 事件数量
+#define MAX_FD 65535                // 支持最大的文件描述符个数（最大的连接客户端数）
+#define MAX_EVENT_NUMBER 65535      // epoll 监听的最大的 IO 事件数量
 #define TIMESLOT 5                  // 定时器发送信号的间隔时间（秒）
+#define MAX_THREADS 5               // 线程池最大的线程数量
 
 
 static int pipefd[2];               // 定时器发送的信号通过管道传输，0 是读端，1是写端
@@ -90,7 +91,7 @@ int main(int argc, char* argv[]) {
     // 创建线程池，初始化线程池
     ThreadPool<HttpConnection>* pool = NULL;
     try {
-        pool = new ThreadPool<HttpConnection>;
+        pool = new ThreadPool<HttpConnection>(MAX_THREADS, MAX_FD);
     }
     catch (...) {
         // 创建线程池失败，参数 ... 表示捕获所有类型的异常
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 监听
-    int ret2 = listen(listen_fd, 1024);
+    int ret2 = listen(listen_fd, 65535);
     if (ret2 == -1) {
         perror("listen");
         exit(-1);
@@ -220,8 +221,12 @@ int main(int argc, char* argv[]) {
                 // 通信文件描述符读缓冲区有数据
                 UtilTimer* timer = lst_users[sockfd].timer;
                 if (users[sockfd].read()) {
-                    // 一次性把所有数据读完，users + sockfd 找到对应的
-                    pool->append(users + sockfd);
+                    // 一次性把所有数据读完，users + sockfd 找到对应的 HTTP 任务类对象
+                    if (!pool->append(users + sockfd)) {
+                        // 线程池工作队列已满，HTTP 请求数据丢失
+                        users[sockfd].clearBuffer();
+                        continue;
+                    }
 
                     // 成功读取数据，调整该连接对应的定时器，以延迟该连接被关闭的时间（客户端还在活跃）
                     if (timer) {
@@ -248,7 +253,8 @@ int main(int argc, char* argv[]) {
 
         }
 
-        // 最后处理定时事件，因为 I/O 事件有更高的优先级，当然，这样做会存在定时误差
+        // 最后处理定时事件，因为 I/O 有更高优先级，当然，这样做会存在定时误差
+        // 定时误差导致更容易断开不活跃的连接
         if (timeout) {
             timerHandler();
             timeout = false;

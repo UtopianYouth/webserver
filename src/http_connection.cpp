@@ -116,6 +116,11 @@ void HttpConnection::init() {
     bzero(this->m_real_file, FILENAME_LEN);         // 目标文件的完整路径
 }
 
+// 线程池工作队列满，丢弃读取的 HTTP 请求数据
+void HttpConnection::clearBuffer() {
+    this->init();
+}
+
 // 循环读取客户端数据，直到无数据可读或者对方关闭连接
 bool HttpConnection::read() {
     // m_read_index 记录 m_read_buf 数组的遍历情况
@@ -445,6 +450,7 @@ bool HttpConnection::write() {
             modifyFDEpoll(this->m_epoll_fd, this->m_sockfd, EPOLLIN);
 
             if (this->m_keep_alive) {
+                // HTTP 响应写入到内核缓冲区成功，初始化该连接对象的缓冲区，准备接收下一次HTTP请求
                 this->init();
                 return true;
             }

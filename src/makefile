@@ -18,4 +18,4 @@ main: main.cpp http_connection.cpp lst_timer.cpp
 	cp -f webserver ../bin/webserver
 	
 clean:
-	/bin/rm -rf webserver
+	rm -rf ./src/webserver
