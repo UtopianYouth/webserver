@@ -122,10 +122,11 @@ public:
     HttpConnection();
     ~HttpConnection();
     void init(int sockfd, const sockaddr_in& client_addr);      // 初始化新接收的客户端连接
-    void closeConnection();    // 关闭客户端的连接
+    void closeConnection();     // 关闭客户端的连接
     void process();             // 响应并且处理客户端的请求
     bool read();                // 非阻塞读
     bool write();               // 非阻塞写
+    void clearBuffer();         // 线程池工作队列满，丢弃 HttpConnection 对象
 
 private:
     void init();                                    // 初始化其余的数据
